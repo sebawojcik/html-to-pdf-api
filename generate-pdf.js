@@ -1,14 +1,29 @@
-import puppeteer from 'puppeteer-core';
-import chromium from '@sparticuz/chromium';
-
 export default async function handler(req, res) {
+  // Enable CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  if (req.method === 'GET') {
+    return res.status(405).json({ error: 'Method not allowed. Use POST.' });
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
+    // For now, let's just return the processed HTML to verify it works
     const { html, voucherID, serviceType, price, duration, expiryDate, phone, address } = req.body;
     
+    if (!html) {
+      return res.status(400).json({ error: 'HTML content is required' });
+    }
+
     // Replace placeholders in HTML
     let processedHtml = html
       .replace(/{{voucherID}}/g, voucherID || '#12345')
@@ -19,34 +34,12 @@ export default async function handler(req, res) {
       .replace(/{{phone}}/g, phone || '(+48) 573 994 499')
       .replace(/{{address}}/g, address || 'ul.Miodowa 21/4, Kraków');
 
-    const browser = await puppeteer.launch({
-      args: chromium.args,
-      defaultViewport: chromium.defaultViewport,
-      executablePath: await chromium.executablePath(),
-      headless: chromium.headless,
-    });
-
-    const page = await browser.newPage();
-    
-    await page.setViewport({ width: 420, height: 297, deviceScaleFactor: 2 });
-    
-    await page.setContent(processedHtml, { waitUntil: 'networkidle0' });
-    
-    const pdf = await page.pdf({
-      width: '420px',
-      height: '297px',
-      printBackground: true,
-      margin: { top: 0, right: 0, bottom: 0, left: 0 }
-    });
-
-    await browser.close();
-
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="voucher-${voucherID}.pdf"`);
-    res.send(pdf);
+    // For testing, return the processed HTML instead of PDF
+    res.setHeader('Content-Type', 'text/html');
+    res.send(processedHtml);
 
   } catch (error) {
-    console.error('Error generating PDF:', error);
-    res.status(500).json({ error: 'Failed to generate PDF' });
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Server error', details: error.message });
   }
 }
