@@ -1,15 +1,13 @@
+import puppeteer from 'puppeteer-core';
+import chromium from '@sparticuz/chromium';
+
 export default async function handler(req, res) {
-  // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
-  }
-
-  if (req.method === 'GET') {
-    return res.status(405).json({ error: 'Method not allowed. Use POST.' });
   }
 
   if (req.method !== 'POST') {
@@ -33,12 +31,31 @@ export default async function handler(req, res) {
       .replace(/{{phone}}/g, phone || '(+48) 573 994 499')
       .replace(/{{address}}/g, address || 'ul.Miodowa 21/4, Kraków');
 
-    // For now, return processed HTML to test
-    res.setHeader('Content-Type', 'text/html');
-    res.send(processedHtml);
+    const browser = await puppeteer.launch({
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath(),
+      headless: chromium.headless,
+    });
+
+    const page = await browser.newPage();
+    await page.setContent(processedHtml, { waitUntil: 'networkidle0' });
+    
+    const pdf = await page.pdf({
+      width: '420px',
+      height: '297px',
+      printBackground: true,
+      margin: { top: 0, right: 0, bottom: 0, left: 0 }
+    });
+
+    await browser.close();
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="voucher-${voucherID || 'default'}.pdf"`);
+    res.send(pdf);
 
   } catch (error) {
-    console.error('Error:', error);
-    res.status(500).json({ error: 'Server error', details: error.message });
+    console.error('Error generating PDF:', error);
+    res.status(500).json({ error: 'Failed to generate PDF', details: error.message });
   }
 }
